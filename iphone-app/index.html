@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Scanner">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#2343d4">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{color-scheme:light; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style><title>Taschenscanner</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Figtree:wght@400;500;600;700&display=swap">
+<script src="jspdf.umd.min.js"></script>
+<style>
+/* Layout: one-screen app — header, scrollable page grid, fixed action bar; full-screen dark editor overlay */
+:root{
+  --bg:#eceff4; --surface:#ffffff; --ink:#131925; --muted:#5a6477; --line:#d3d9e3;
+  --accent:#2343d4; --accent-ink:#ffffff; --mark:#ffd23f; --danger:#c3352a;
+  --stage:#0b0d12; --stage-ink:#eef1f6; --stage-line:#2a2f3b;
+  --font-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body:"Figtree", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --r:14px;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f131b; --surface:#181e2a; --ink:#e7ebf2; --muted:#98a2b5; --line:#2a3242;
+  --accent:#7590ff; --accent-ink:#0a0e18; --danger:#ff6f61; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0f131b; --surface:#181e2a; --ink:#e7ebf2; --muted:#98a2b5; --line:#2a3242;
+  --accent:#7590ff; --accent-ink:#0a0e18; --danger:#ff6f61; color-scheme:dark }
+
+html,body{height:100%}
+body{background:var(--bg); color:var(--ink); font-family:var(--font-body); font-size:15px; line-height:1.45; -webkit-tap-highlight-color:transparent}
+button{font:inherit; color:inherit; cursor:pointer}
+button:focus-visible, input:focus-visible{outline:3px solid var(--accent); outline-offset:2px}
+.app{min-height:100%; display:flex; flex-direction:column;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:18px 120px; max-width:880px; margin:0 auto; box-sizing:border-box}
+
+header{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; padding-bottom:16px; border-bottom:1px solid var(--line)}
+.brand{display:flex; align-items:center; gap:10px}
+.brand svg{flex:none}
+h1{font-family:var(--font-display); font-weight:800; font-size:26px; letter-spacing:-.02em; margin:0; line-height:1}
+.count{color:var(--muted); font-size:13px; font-variant-numeric:tabular-nums; margin-top:4px}
+.linkbtn{background:none; border:0; color:var(--muted); font-size:14px; padding:8px 4px; text-decoration:underline; text-underline-offset:3px}
+.linkbtn.warn{color:var(--danger); font-weight:600}
+
+/* empty state */
+.empty{display:grid; gap:22px; padding-block:28px 8px; justify-items:start}
+.empty h2{font-family:var(--font-display); font-weight:800; font-size:clamp(26px,7vw,40px); line-height:1.05; letter-spacing:-.025em; margin:0; text-wrap:balance; max-width:16ch}
+.empty p{color:var(--muted); margin:0; max-width:46ch}
+.steps{list-style:none; padding:0; margin:0; display:grid; gap:12px; width:100%}
+.steps li{display:grid; grid-template-columns:34px 1fr; gap:12px; align-items:start; background:var(--surface); border:1px solid var(--line); border-radius:var(--r); padding:14px}
+.steps b{display:block; font-weight:700}
+.steps span{color:var(--muted); font-size:14px}
+.steps i{font-style:normal; font-family:var(--font-display); font-weight:800; font-size:18px; width:34px; height:34px; border-radius:50%; display:grid; place-items:center; background:var(--mark); color:#131925}
+
+/* page grid */
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:16px; padding-top:18px}
+.page{margin:0; display:flex; flex-direction:column; gap:8px; min-width:0}
+.thumb{display:block; padding:0; border:1px solid var(--line); border-radius:6px; background:#fff; aspect-ratio:210/297; overflow:hidden; box-shadow:0 1px 0 var(--line), 0 6px 16px -10px rgba(10,20,40,.35); max-width:100%}
+.thumb img{width:100%; height:100%; object-fit:contain; display:block}
+.page figcaption{display:flex; align-items:center; justify-content:space-between; gap:4px}
+.num{font-family:var(--font-display); font-weight:800; font-size:15px; font-variant-numeric:tabular-nums}
+.ptools{display:flex; gap:2px}
+.icon{width:36px; height:36px; border-radius:10px; border:0; background:transparent; display:grid; place-items:center; color:var(--muted)}
+.icon:hover{background:var(--surface); color:var(--ink)}
+.icon:disabled{opacity:.3; cursor:default; background:transparent}
+.icon.armed{background:var(--danger); color:#fff; width:auto; padding:0 10px; font-size:13px; font-weight:600}
+
+/* action bar */
+.bar{position:fixed; left:0; right:0; bottom:0; z-index:5; background:var(--surface); border-top:1px solid var(--line);
+  padding-top:12px; padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.bar-in{max-width:880px; margin:0 auto; display:grid; grid-template-columns:auto 1fr auto; gap:10px; align-items:center}
+.btn{border:1px solid var(--line); background:var(--surface); border-radius:12px; height:52px; padding:0 16px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font-weight:600; white-space:nowrap}
+.btn.primary{background:var(--accent); color:var(--accent-ink); border-color:transparent}
+.btn.cam{background:var(--ink); color:var(--bg); border-color:transparent; font-size:16px}
+.btn:disabled{opacity:.45; cursor:default}
+@media (max-width:420px){ .btn .lbl-long{display:none} .btn{padding:0 13px} }
+
+/* editor */
+.editor{position:fixed; inset:0; z-index:20; background:var(--stage); color:var(--stage-ink); display:flex; flex-direction:column;
+  padding-top:env(safe-area-inset-top, 0px); padding-bottom:env(safe-area-inset-bottom, 0px); color-scheme:dark}
+.ed-top{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:10px max(12px, env(safe-area-inset-right, 0px)) 10px max(12px, env(safe-area-inset-left, 0px))}
+.ed-title{font-family:var(--font-display); font-weight:600; font-size:16px; text-align:center; flex:1; min-width:0}
+.ed-btn{height:42px; padding:0 14px; border-radius:10px; border:1px solid var(--stage-line); background:transparent; color:var(--stage-ink); font-weight:600}
+.ed-btn.go{background:var(--mark); color:#131925; border-color:transparent}
+.stage{position:relative; flex:1; min-height:0; overflow:hidden}
+#cropCv{position:absolute; inset:0; touch-action:none; display:block}
+.preview{position:absolute; inset:16px; width:calc(100% - 32px); height:calc(100% - 32px); object-fit:contain; max-width:none}
+.loupe{position:absolute; top:12px; left:12px; width:120px; height:120px; border-radius:50%; border:3px solid var(--mark); box-shadow:0 8px 24px rgba(0,0,0,.6); pointer-events:none; background:#000}
+.loupe.right{left:auto; right:12px}
+.busy{position:absolute; inset:0; display:grid; place-items:center; background:rgba(11,13,18,.6); font-weight:600}
+.hint{font-size:13px; color:#a9b1c2; text-align:center; padding:0 16px 6px}
+.ed-bottom{padding:8px max(12px, env(safe-area-inset-right, 0px)) 14px max(12px, env(safe-area-inset-left, 0px)); display:grid; gap:10px}
+.row{display:flex; gap:8px; justify-content:center; flex-wrap:wrap}
+.chip{height:40px; padding:0 14px; border-radius:999px; border:1px solid var(--stage-line); background:transparent; color:var(--stage-ink); font-weight:500}
+.chip[aria-pressed="true"]{background:var(--stage-ink); color:var(--stage); border-color:transparent; font-weight:700}
+.chip.ic{width:40px; padding:0; display:grid; place-items:center}
+
+/* export sheet */
+.sheet-wrap{position:fixed; inset:0; z-index:30; background:rgba(8,12,20,.5); display:flex; align-items:flex-end; justify-content:center}
+.sheet{background:var(--surface); color:var(--ink); width:100%; max-width:520px; border-radius:20px 20px 0 0; box-sizing:border-box;
+  padding:22px max(18px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(18px, env(safe-area-inset-left, 0px)); display:grid; gap:16px}
+.sheet h3{font-family:var(--font-display); font-weight:800; font-size:22px; margin:0; letter-spacing:-.01em}
+.field{display:grid; gap:6px}
+.field > span, legend{font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+.field input[type=text]{height:46px; border-radius:10px; border:1px solid var(--line); background:var(--bg); color:var(--ink); padding:0 12px; font:inherit; min-width:0}
+fieldset{border:0; padding:0; margin:0; display:grid; gap:8px}
+.seg{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.seg label{border:1px solid var(--line); border-radius:10px; padding:10px 12px; display:grid; gap:2px; cursor:pointer}
+.seg label:has(input:checked){border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent)}
+.seg input{position:absolute; opacity:0; pointer-events:none}
+.seg b{font-weight:700}
+.seg small{color:var(--muted); font-size:12.5px}
+.sheet-actions{display:grid; grid-template-columns:auto 1fr; gap:10px}
+.status{font-size:14px; color:var(--muted); min-height:1.4em; margin:0}
+.status.err{color:var(--danger)}
+
+.toast{position:fixed; left:50%; transform:translateX(-50%); bottom:calc(92px + env(safe-area-inset-bottom, 0px)); z-index:40; background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:10px; font-weight:600; font-size:14px; max-width:calc(100% - 32px); box-sizing:border-box; text-align:center}
+@media (prefers-reduced-motion:no-preference){ .toast{animation:pop .2s ease-out} @keyframes pop{from{opacity:0; transform:translate(-50%,8px)}} }
+</style>
+</head>
+<body>
+
+
+<div class="app">
+  <header>
+    <div>
+      <div class="brand">
+        <svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><rect x="5" y="3" width="20" height="24" rx="2" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M2 9V2h7M28 9V2h-7M2 21v7h7M28 21v7h-7" fill="none" stroke="var(--accent)" stroke-width="2.6"/><path d="M9 11h12M9 15h12M9 19h8" stroke="currentColor" stroke-width="1.8"/></svg>
+        <h1>Taschenscanner</h1>
+      </div>
+      <div class="count" id="count">Noch keine Seiten</div>
+    </div>
+    <button class="linkbtn" id="btnClear" hidden>Alle löschen</button>
+  </header>
+
+  <section class="empty" id="empty">
+    <h2>Papier rein, PDF raus.</h2>
+    <p>Fotografiere Seiten mit der Handykamera. Die App richtet sie gerade aus, macht den Hintergrund weiß und legt alles in eine PDF-Datei. Die Bilder bleiben auf deinem Gerät.</p>
+    <ol class="steps">
+      <li><i>1</i><div><b>Seite fotografieren</b><span>Auf „Scannen“ tippen, die Kamera öffnet sich.</span></div></li>
+      <li><i>2</i><div><b>Ecken anpassen</b><span>Die gelben Punkte auf die vier Blattecken ziehen.</span></div></li>
+      <li><i>3</i><div><b>Als PDF speichern</b><span>Beliebig viele Seiten sammeln, dann eine Datei erzeugen.</span></div></li>
+    </ol>
+  </section>
+
+  <section class="grid" id="grid" aria-label="Gescannte Seiten" hidden></section>
+</div>
+
+<nav class="bar" aria-label="Aktionen">
+  <div class="bar-in">
+    <button class="btn" id="btnGallery" aria-label="Bild aus Galerie wählen">
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="9" cy="10" r="2" fill="currentColor"/><path d="M4 18l5-5 4 4 3-3 4 4" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      <span class="lbl-long">Galerie</span>
+    </button>
+    <button class="btn cam" id="btnCamera">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3l2-2.5h6L17 7h3a1 1 0 011 1v11a1 1 0 01-1 1H4a1 1 0 01-1-1V8a1 1 0 011-1z" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="3.6" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+      Scannen
+    </button>
+    <button class="btn primary" id="btnPdf" disabled>
+      <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+      PDF
+    </button>
+  </div>
+</nav>
+
+<input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+<input type="file" id="galIn" accept="image/*" multiple hidden>
+
+<section class="editor" id="editor" hidden aria-label="Seite bearbeiten">
+  <div class="ed-top">
+    <button class="ed-btn" id="edBack">Abbrechen</button>
+    <div class="ed-title" id="edTitle">Ecken anpassen</div>
+    <button class="ed-btn go" id="edNext">Weiter</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="cropCv"></canvas>
+    <canvas id="loupe" class="loupe" width="240" height="240" hidden></canvas>
+    <img id="preview" class="preview" alt="Vorschau der bearbeiteten Seite" hidden>
+    <div class="busy" id="busy" hidden>Wird bearbeitet …</div>
+  </div>
+  <div class="ed-bottom">
+    <div id="cropTools" class="row">
+      <div class="hint" style="flex-basis:100%">Gelbe Punkte auf die Blattecken ziehen</div>
+      <button class="chip" id="btnFull">Ganzes Bild</button>
+      <button class="chip" id="btnAuto">Ecken erkennen</button>
+    </div>
+    <div id="filterTools" class="row" hidden>
+      <button class="chip" data-filter="enhance">Verbessert</button>
+      <button class="chip" data-filter="bw">Schwarzweiß</button>
+      <button class="chip" data-filter="gray">Graustufen</button>
+      <button class="chip" data-filter="original">Original</button>
+      <button class="chip ic" id="rotL" aria-label="Nach links drehen"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4L4 8l4 4M4 8h9a7 7 0 110 14H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button class="chip ic" id="rotR" aria-label="Nach rechts drehen"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4l4 4-4 4M20 8h-9a7 7 0 100 14h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+  </div>
+</section>
+
+<div class="sheet-wrap" id="sheet" hidden>
+  <form class="sheet" id="pdfForm" aria-label="PDF erstellen">
+    <h3>PDF erstellen</h3>
+    <label class="field"><span>Dateiname</span><input type="text" id="fname" autocomplete="off"></label>
+    <fieldset>
+      <legend>Seitenformat</legend>
+      <div class="seg">
+        <label><input type="radio" name="fmt" id="fmtA4" value="a4" checked><b>DIN A4</b><small>Einheitliche Seiten</small></label>
+        <label><input type="radio" name="fmt" id="fmtFit" value="fit"><b>Wie gescannt</b><small>Ohne Rand, Seitenverhältnis bleibt</small></label>
+      </div>
+    </fieldset>
+    <fieldset>
+      <legend>Qualität</legend>
+      <div class="seg">
+        <label><input type="radio" name="q" id="qStd" value="std" checked><b>Standard</b><small>Klein, gut für E-Mail</small></label>
+        <label><input type="radio" name="q" id="qHigh" value="high"><b>Hoch</b><small>Scharf, größere Datei</small></label>
+      </div>
+    </fieldset>
+    <p class="status" id="status" role="status"></p>
+    <div class="sheet-actions">
+      <button type="button" class="btn" id="sheetClose">Schließen</button>
+      <button type="submit" class="btn primary" id="btnMake">PDF speichern</button>
+    </div>
+  </form>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script>
+(() => {
+const $ = s => document.querySelector(s);
+const pages = [];            // {id, src:Blob, quad, filter, rot, out:Blob, url}
+let session = null;          // current editor session
+let downloads = null;
+
+/* ---------- capabilities ---------- */
+(async () => { try { if (window.claude && claude.use) downloads = await claude.use("downloads"); } catch (e) { downloads = null; } })();
+
+/* ---------- storage (per device) ---------- */
+const DB = {
+  db: null,
+  async open() {
+    try {
+      this.db = await new Promise((res, rej) => {
+        const r = indexedDB.open("taschenscanner", 1);
+        r.onupgradeneeded = () => r.result.createObjectStore("pages", { keyPath: "id" });
+        r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+      });
+    } catch (e) { this.db = null; }
+  },
+  async all() {
+    if (!this.db) return [];
+    try { return await new Promise((res, rej) => { const q = this.db.transaction("pages").objectStore("pages").getAll(); q.onsuccess = () => res(q.result || []); q.onerror = () => rej(q.error); }); }
+    catch (e) { return []; }
+  },
+  put(p, pos) { if (!this.db) return; try { const { url, ...rec } = p; rec.pos = pos; this.db.transaction("pages", "readwrite").objectStore("pages").put(rec); } catch (e) {} },
+  del(id) { if (!this.db) return; try { this.db.transaction("pages", "readwrite").objectStore("pages").delete(id); } catch (e) {} },
+  saveOrder() { pages.forEach((p, i) => this.put(p, i)); }
+};
+
+/* ---------- toast ---------- */
+let toastT;
+function toast(msg) { const t = $("#toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, 2600); }
+
+/* ---------- page list ---------- */
+const ICON = {
+  left: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  right: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  del: '<svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>'
+};
+function render() {
+  const n = pages.length;
+  $("#count").textContent = n === 0 ? "Noch keine Seiten" : n === 1 ? "1 Seite" : n + " Seiten";
+  $("#empty").hidden = n > 0; $("#grid").hidden = n === 0; $("#btnClear").hidden = n === 0;
+  $("#btnPdf").disabled = n === 0;
+  $("#grid").innerHTML = pages.map((p, i) => `
+    <figure class="page" data-id="${p.id}">
+      <button class="thumb" data-act="edit" aria-label="Seite ${i + 1} bearbeiten"><img src="${p.url}" alt=""></button>
+      <figcaption><span class="num">${i + 1}</span>
+        <span class="ptools">
+          <button class="icon" data-act="left" aria-label="Nach vorne" ${i === 0 ? "disabled" : ""}>${ICON.left}</button>
+          <button class="icon" data-act="right" aria-label="Nach hinten" ${i === n - 1 ? "disabled" : ""}>${ICON.right}</button>
+          <button class="icon" data-act="del" aria-label="Seite ${i + 1} löschen">${ICON.del}</button>
+        </span></figcaption>
+    </figure>`).join("");
+}
+$("#grid").addEventListener("click", async e => {
+  const b = e.target.closest("button[data-act]"); if (!b) return;
+  const id = b.closest(".page").dataset.id; const i = pages.findIndex(p => p.id === id); if (i < 0) return;
+  const act = b.dataset.act;
+  if (act === "left" && i > 0) { [pages[i - 1], pages[i]] = [pages[i], pages[i - 1]]; DB.saveOrder(); render(); }
+  else if (act === "right" && i < pages.length - 1) { [pages[i + 1], pages[i]] = [pages[i], pages[i + 1]]; DB.saveOrder(); render(); }
+  else if (act === "del") {
+    if (!b.classList.contains("armed")) { b.classList.add("armed"); b.textContent = "Löschen?"; setTimeout(() => { if (b.isConnected) { b.classList.remove("armed"); b.innerHTML = ICON.del; } }, 3000); return; }
+    URL.revokeObjectURL(pages[i].url); DB.del(id); pages.splice(i, 1); DB.saveOrder(); render(); toast("Seite gelöscht");
+  }
+  else if (act === "edit") { const p = pages[i]; const cv = await loadSource(p.src); openEditor(cv, { pageId: p.id, quad: p.quad, filter: p.filter, rot: p.rot }); }
+});
+$("#btnClear").addEventListener("click", e => {
+  const b = e.currentTarget;
+  if (!b.classList.contains("warn")) { b.classList.add("warn"); b.textContent = "Wirklich alle löschen?"; setTimeout(() => { b.classList.remove("warn"); b.textContent = "Alle löschen"; }, 3000); return; }
+  pages.forEach(p => { URL.revokeObjectURL(p.url); DB.del(p.id); }); pages.length = 0;
+  b.classList.remove("warn"); b.textContent = "Alle löschen"; render(); toast("Alle Seiten gelöscht");
+});
+
+/* ---------- input ---------- */
+$("#btnCamera").addEventListener("click", () => $("#camIn").click());
+$("#btnGallery").addEventListener("click", () => $("#galIn").click());
+$("#camIn").addEventListener("change", e => startFiles([...e.target.files]));
+$("#galIn").addEventListener("change", e => startFiles([...e.target.files]));
+let queue = [];
+async function startFiles(files) {
+  $("#camIn").value = ""; $("#galIn").value = "";
+  if (!files.length) return;
+  queue = files.slice(1);
+  try { const cv = await loadSource(files[0]); openEditor(cv, {}); }
+  catch (e) { toast("Das Bild konnte nicht geöffnet werden."); }
+}
+async function loadSource(blob) {
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = url; });
+    const MAX = 2400, w = img.naturalWidth, h = img.naturalHeight, s = Math.min(1, MAX / Math.max(w, h));
+    const c = document.createElement("canvas"); c.width = Math.round(w * s); c.height = Math.round(h * s);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return c;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+/* ---------- geometry ---------- */
+function insetQuad(w, h, f) { return [[w * f, h * f], [w * (1 - f), h * f], [w * (1 - f), h * (1 - f)], [w * f, h * (1 - f)]]; }
+function homography(src, dst) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [x, y] = src[i], [u, v] = dst[i];
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  for (let c = 0; c < 8; c++) {
+    let p = c; for (let r = c + 1; r < 8; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+    [A[c], A[p]] = [A[p], A[c]]; [b[c], b[p]] = [b[p], b[c]];
+    for (let r = 0; r < 8; r++) { if (r === c) continue; const f = A[r][c] / A[c][c]; if (!f) continue; for (let k = c; k < 8; k++) A[r][k] -= f * A[c][k]; b[r] -= f * b[c]; }
+  }
+  return b.map((v, i) => v / A[i][i]);
+}
+function warp(srcData, sw, sh, quad) {
+  const d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  let W = Math.max(d(quad[0], quad[1]), d(quad[3], quad[2])), H = Math.max(d(quad[0], quad[3]), d(quad[1], quad[2]));
+  const s = Math.min(1, 2200 / Math.max(W, H)); W = Math.max(8, Math.round(W * s)); H = Math.max(8, Math.round(H * s));
+  const h = homography([[0, 0], [W, 0], [W, H], [0, H]], quad);
+  const sd = srcData, out = new ImageData(W, H), od = out.data, maxU = sw - 1.001, maxV = sh - 1.001, row = sw * 4;
+  for (let y = 0; y < H; y++) {
+    const yy = y + 0.5;
+    for (let x = 0; x < W; x++) {
+      const xx = x + 0.5, den = h[6] * xx + h[7] * yy + 1;
+      let u = (h[0] * xx + h[1] * yy + h[2]) / den, v = (h[3] * xx + h[4] * yy + h[5]) / den;
+      u = u < 0 ? 0 : u > maxU ? maxU : u; v = v < 0 ? 0 : v > maxV ? maxV : v;
+      const x0 = u | 0, y0 = v | 0, fx = u - x0, fy = v - y0, i00 = (y0 * sw + x0) * 4, i01 = i00 + row, o = (y * W + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const a = sd[i00 + c] + (sd[i00 + 4 + c] - sd[i00 + c]) * fx;
+        const bb = sd[i01 + c] + (sd[i01 + 4 + c] - sd[i01 + c]) * fx;
+        od[o + c] = a + (bb - a) * fy;
+      }
+      od[o + 3] = 255;
+    }
+  }
+  return out;
+}
+
+/* ---------- filters ---------- */
+function paperMap(img) {
+  // estimate the paper brightness per area: cell means, dilated (max) so text cells take the paper value, then smoothed
+  const { width: W, height: H, data } = img, S = Math.max(8, Math.round(Math.max(W, H) / 40));
+  const gw = Math.ceil(W / S), gh = Math.ceil(H / S); let g = new Float32Array(gw * gh); const cnt = new Float32Array(gw * gh);
+  for (let y = 0; y < H; y++) { const gy = (y / S | 0) * gw; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; const k = gy + (x / S | 0); g[k] += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]; cnt[k]++; } }
+  for (let k = 0; k < g.length; k++) g[k] /= cnt[k] || 1;
+  const pass = (fn) => { const o = new Float32Array(g.length); for (let y = 0; y < gh; y++) for (let x = 0; x < gw; x++) { let acc = fn === "max" ? 0 : 0, n = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const yy = y + dy, xx = x + dx; if (yy < 0 || xx < 0 || yy >= gh || xx >= gw) continue; const v = g[yy * gw + xx]; if (fn === "max") { if (v > acc) acc = v; } else { acc += v; n++; } } o[y * gw + x] = fn === "max" ? acc : acc / n; } g = o; };
+  pass("max"); pass("max"); pass("avg");
+  return { g, gw, gh, S };
+}
+function applyFilter(src, mode) {
+  const img = new ImageData(new Uint8ClampedArray(src.data), src.width, src.height);
+  if (mode === "original") return img;
+  const { width: W, height: H, data: d } = img;
+  if (mode === "gray") {
+    for (let i = 0; i < d.length; i += 4) { let v = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; v = (v - 12) * 1.08; d[i] = d[i + 1] = d[i + 2] = v; }
+    return img;
+  }
+  const { g, gw, gh, S } = paperMap(img);
+  for (let y = 0; y < H; y++) {
+    let gy = (y + 0.5) / S - 0.5; gy = gy < 0 ? 0 : gy > gh - 1 ? gh - 1 : gy; const y0 = gy | 0, y1 = Math.min(gh - 1, y0 + 1), fy = gy - y0;
+    for (let x = 0; x < W; x++) {
+      let gx = (x + 0.5) / S - 0.5; gx = gx < 0 ? 0 : gx > gw - 1 ? gw - 1 : gx; const x0 = gx | 0, x1 = Math.min(gw - 1, x0 + 1), fx = gx - x0;
+      const a = g[y0 * gw + x0] + (g[y0 * gw + x1] - g[y0 * gw + x0]) * fx, b = g[y1 * gw + x0] + (g[y1 * gw + x1] - g[y1 * gw + x0]) * fx;
+      const bg = Math.max(60, a + (b - a) * fy), k = 245 / bg, i = (y * W + x) * 4;
+      if (mode === "bw") {
+        const n = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) * k;
+        const v = n <= 105 ? 0 : n >= 205 ? 255 : (n - 105) * 2.55;
+        d[i] = d[i + 1] = d[i + 2] = v;
+      } else {
+        for (let c = 0; c < 3; c++) { const v = d[i + c] * k; d[i + c] = (v - 22) * 1.12; }
+      }
+    }
+  }
+  return img;
+}
+function toCanvas(img, rot) {
+  const c1 = document.createElement("canvas"); c1.width = img.width; c1.height = img.height; c1.getContext("2d").putImageData(img, 0, 0);
+  if (!rot) return c1;
+  const c2 = document.createElement("canvas"), sw = rot % 180 !== 0;
+  c2.width = sw ? img.height : img.width; c2.height = sw ? img.width : img.height;
+  const x = c2.getContext("2d"); x.translate(c2.width / 2, c2.height / 2); x.rotate(rot * Math.PI / 180); x.drawImage(c1, -img.width / 2, -img.height / 2);
+  return c2;
+}
+const toBlob = (c, q) => new Promise(r => c.toBlob(r, "image/jpeg", q));
+
+/* ---------- simple corner detection ---------- */
+function detectCorners(cv) {
+  // downscale, find the bright paper region by a brightness threshold, then pick the extreme points along the diagonals
+  const s = Math.min(1, 320 / Math.max(cv.width, cv.height)), w = Math.max(8, Math.round(cv.width * s)), h = Math.max(8, Math.round(cv.height * s));
+  const c = document.createElement("canvas"); c.width = w; c.height = h; const x = c.getContext("2d"); x.drawImage(cv, 0, 0, w, h);
+  const d = x.getImageData(0, 0, w, h).data, L = new Float32Array(w * h); let sum = 0;
+  for (let i = 0; i < w * h; i++) { L[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2] - 0.35 * (Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) - Math.min(d[i * 4], d[i * 4 + 1], d[i * 4 + 2])); sum += L[i]; }
+  // Otsu threshold
+  const hist = new Array(256).fill(0); for (const v of L) hist[Math.max(0, Math.min(255, v | 0))]++;
+  let total = w * h, sumAll = 0; for (let t = 0; t < 256; t++) sumAll += t * hist[t];
+  let sumB = 0, wB = 0, best = 0, thr = 128;
+  for (let t = 0; t < 256; t++) { wB += hist[t]; if (!wB) continue; const wF = total - wB; if (!wF) break; sumB += t * hist[t]; const mB = sumB / wB, mF = (sumAll - sumB) / wF, between = wB * wF * (mB - mF) ** 2; if (between > best) { best = between; thr = t; } }
+  // largest bright component connected to the center region
+  const mask = new Uint8Array(w * h); for (let i = 0; i < w * h; i++) mask[i] = L[i] > thr ? 1 : 0;
+  const seen = new Uint8Array(w * h); let bestComp = null;
+  for (let start = 0; start < w * h; start++) {
+    if (!mask[start] || seen[start]) continue;
+    const comp = [], st = [start]; seen[start] = 1;
+    while (st.length) { const p = st.pop(); comp.push(p); const px = p % w, py = (p / w) | 0;
+      if (px > 0 && mask[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; st.push(p - 1); }
+      if (px < w - 1 && mask[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; st.push(p + 1); }
+      if (py > 0 && mask[p - w] && !seen[p - w]) { seen[p - w] = 1; st.push(p - w); }
+      if (py < h - 1 && mask[p + w] && !seen[p + w]) { seen[p + w] = 1; st.push(p + w); } }
+    if (!bestComp || comp.length > bestComp.length) bestComp = comp;
+  }
+  if (!bestComp || bestComp.length < w * h * 0.08 || bestComp.length > w * h * 0.97) return null;
+  let tl, tr, br, bl, vtl = Infinity, vtr = -Infinity, vbr = -Infinity, vbl = Infinity;
+  for (const p of bestComp) { const px = p % w, py = (p / w) | 0, a = px + py, b = px - py;
+    if (a < vtl) { vtl = a; tl = [px, py]; } if (a > vbr) { vbr = a; br = [px, py]; }
+    if (b > vtr) { vtr = b; tr = [px, py]; } if (b < vbl) { vbl = b; bl = [px, py]; } }
+  const k = 1 / s; return [tl, tr, br, bl].map(([px, py]) => [Math.min(cv.width, (px + 0.5) * k), Math.min(cv.height, (py + 0.5) * k)]);
+}
+
+/* ---------- editor ---------- */
+const cropCv = $("#cropCv"), cctx = cropCv.getContext("2d"), loupe = $("#loupe"), lctx = loupe.getContext("2d");
+let view = null, drag = -1;
+
+function openEditor(cv, opts) {
+  const auto = opts.quad ? null : detectCorners(cv);
+  session = {
+    cv, srcData: cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data,
+    quad: opts.quad ? opts.quad.map(p => p.slice()) : (auto || insetQuad(cv.width, cv.height, 0.05)),
+    filter: opts.filter || "enhance", rot: opts.rot || 0, pageId: opts.pageId || null, step: "crop", warped: null, warpedFor: ""
+  };
+  $("#editor").hidden = false; document.body.style.overflow = "hidden";
+  setStep("crop");
+  if (!opts.quad) toast(auto ? "Ecken erkannt – bitte prüfen" : "Bitte die Ecken setzen");
+}
+function closeEditor() { session = null; $("#editor").hidden = true; document.body.style.overflow = ""; }
+function setStep(step) {
+  session.step = step;
+  const crop = step === "crop";
+  $("#cropTools").hidden = !crop; $("#filterTools").hidden = crop; cropCv.hidden = !crop; $("#preview").hidden = crop;
+  $("#edTitle").textContent = crop ? "Ecken anpassen" : "Aussehen wählen";
+  $("#edBack").textContent = crop ? "Abbrechen" : "Zurück";
+  $("#edNext").textContent = crop ? "Weiter" : (session.pageId ? "Speichern" : "Übernehmen");
+  if (crop) requestAnimationFrame(layoutCrop); else renderPreview();
+}
+function layoutCrop() {
+  if (!session || session.step !== "crop") return;
+  const r = $("#stage").getBoundingClientRect(), dpr = window.devicePixelRatio || 1, pad = 26;
+  cropCv.width = Math.round(r.width * dpr); cropCv.height = Math.round(r.height * dpr);
+  cropCv.style.width = r.width + "px"; cropCv.style.height = r.height + "px";
+  const sw = session.cv.width, sh = session.cv.height, s = Math.min((r.width - 2 * pad) / sw, (r.height - 2 * pad) / sh);
+  view = { s, ox: (r.width - sw * s) / 2, oy: (r.height - sh * s) / 2, dpr, w: r.width, h: r.height };
+  drawCrop();
+}
+function drawCrop() {
+  const { s, ox, oy, dpr, w, h } = view, q = session.quad, cv = session.cv;
+  cctx.setTransform(dpr, 0, 0, dpr, 0, 0); cctx.clearRect(0, 0, w, h);
+  cctx.drawImage(cv, ox, oy, cv.width * s, cv.height * s);
+  const P = q.map(([x, y]) => [ox + x * s, oy + y * s]);
+  cctx.beginPath(); cctx.rect(ox, oy, cv.width * s, cv.height * s);
+  cctx.moveTo(...P[0]); for (let i = 1; i < 4; i++) cctx.lineTo(...P[i]); cctx.closePath();
+  cctx.fillStyle = "rgba(6,8,14,.58)"; cctx.fill("evenodd");
+  cctx.beginPath(); cctx.moveTo(...P[0]); for (let i = 1; i < 4; i++) cctx.lineTo(...P[i]); cctx.closePath();
+  cctx.lineWidth = 2; cctx.strokeStyle = "#ffd23f"; cctx.stroke();
+  P.forEach(([x, y], i) => { cctx.beginPath(); cctx.arc(x, y, i === drag ? 15 : 11, 0, Math.PI * 2); cctx.fillStyle = i === drag ? "rgba(255,210,63,.35)" : "#ffd23f"; cctx.fill(); cctx.lineWidth = 2.5; cctx.strokeStyle = "#131925"; cctx.stroke(); });
+}
+function drawLoupe(i) {
+  const [qx, qy] = session.quad[i], z = 3, S = 240, cv = session.cv, scale = Math.min(view.s * z * 2, 4);
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.fillStyle = "#000"; lctx.fillRect(0, 0, S, S);
+  lctx.setTransform(scale, 0, 0, scale, S / 2 - qx * scale, S / 2 - qy * scale);
+  lctx.drawImage(cv, 0, 0);
+  lctx.beginPath(); lctx.moveTo(...session.quad[0]); for (let k = 1; k < 4; k++) lctx.lineTo(...session.quad[k]); lctx.closePath();
+  lctx.lineWidth = 3 / scale; lctx.strokeStyle = "#ffd23f"; lctx.stroke();
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.strokeStyle = "#ffd23f"; lctx.lineWidth = 2;
+  lctx.beginPath(); lctx.moveTo(S / 2 - 18, S / 2); lctx.lineTo(S / 2 + 18, S / 2); lctx.moveTo(S / 2, S / 2 - 18); lctx.lineTo(S / 2, S / 2 + 18); lctx.stroke();
+}
+function pt(e) { const r = cropCv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+cropCv.addEventListener("pointerdown", e => {
+  if (!session) return; const [mx, my] = pt(e); let best = -1, bd = 48;
+  session.quad.forEach(([x, y], i) => { const dd = Math.hypot(view.ox + x * view.s - mx, view.oy + y * view.s - my); if (dd < bd) { bd = dd; best = i; } });
+  if (best < 0) return;
+  drag = best; cropCv.setPointerCapture(e.pointerId);
+  session.grab = [view.ox + session.quad[best][0] * view.s - mx, view.oy + session.quad[best][1] * view.s - my];
+  loupe.hidden = false; moveLoupe(mx, my); drawLoupe(best); drawCrop();
+});
+cropCv.addEventListener("pointermove", e => {
+  if (drag < 0) return; const [mx, my] = pt(e), cv = session.cv;
+  const x = (mx + session.grab[0] - view.ox) / view.s, y = (my + session.grab[1] - view.oy) / view.s;
+  session.quad[drag] = [Math.max(0, Math.min(cv.width, x)), Math.max(0, Math.min(cv.height, y))];
+  moveLoupe(mx, my); drawLoupe(drag); drawCrop();
+});
+const endDrag = () => { if (drag < 0) return; drag = -1; loupe.hidden = true; drawCrop(); };
+cropCv.addEventListener("pointerup", endDrag); cropCv.addEventListener("pointercancel", endDrag);
+function moveLoupe(mx, my) { loupe.classList.toggle("right", mx < 170 && my < 170); }
+window.addEventListener("resize", () => { if (session && session.step === "crop") layoutCrop(); });
+
+$("#btnFull").addEventListener("click", () => { session.quad = insetQuad(session.cv.width, session.cv.height, 0); drawCrop(); });
+$("#btnAuto").addEventListener("click", () => { const q = detectCorners(session.cv); if (q) { session.quad = q; drawCrop(); toast("Ecken erkannt"); } else toast("Keine Blattkanten gefunden. Bitte von Hand setzen."); });
+
+function setBusy(on) { $("#busy").hidden = !on; }
+const tick = () => new Promise(r => setTimeout(r, 30));
+async function renderPreview() {
+  document.querySelectorAll("[data-filter]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.filter === session.filter)));
+  setBusy(true); await tick();
+  const key = JSON.stringify(session.quad);
+  if (session.warpedFor !== key) { session.warped = warp(session.srcData, session.cv.width, session.cv.height, session.quad); session.warpedFor = key; }
+  const c = toCanvas(applyFilter(session.warped, session.filter), session.rot);
+  session.result = c;
+  const blob = await toBlob(c, 0.85);
+  const old = $("#preview").src; $("#preview").src = URL.createObjectURL(blob); if (old.startsWith("blob:")) URL.revokeObjectURL(old);
+  session.resultBlob = blob;
+  setBusy(false);
+}
+document.querySelectorAll("[data-filter]").forEach(b => b.addEventListener("click", () => { session.filter = b.dataset.filter; renderPreview(); }));
+$("#rotL").addEventListener("click", () => { session.rot = (session.rot + 270) % 360; renderPreview(); });
+$("#rotR").addEventListener("click", () => { session.rot = (session.rot + 90) % 360; renderPreview(); });
+
+$("#edBack").addEventListener("click", () => {
+  if (session.step === "filter") return setStep("crop");
+  queue = []; closeEditor();
+});
+$("#edNext").addEventListener("click", async () => {
+  if (session.step === "crop") return setStep("filter");
+  if (!session.resultBlob) return;
+  const src = await toBlob(session.cv, 0.9);
+  const rec = { id: session.pageId || ("p" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6)), src, quad: session.quad, filter: session.filter, rot: session.rot, out: session.resultBlob };
+  rec.url = URL.createObjectURL(rec.out);
+  const i = pages.findIndex(p => p.id === rec.id);
+  if (i >= 0) { URL.revokeObjectURL(pages[i].url); pages[i] = rec; DB.put(rec, i); toast("Seite " + (i + 1) + " gespeichert"); }
+  else { pages.push(rec); DB.put(rec, pages.length - 1); toast("Seite " + pages.length + " hinzugefügt"); }
+  closeEditor(); render();
+  if (queue.length) { const f = queue.shift(); try { openEditor(await loadSource(f), {}); } catch (e) { toast("Ein Bild konnte nicht geöffnet werden."); } }
+});
+
+/* ---------- PDF ---------- */
+function defaultName() { const d = new Date(), p = n => String(n).padStart(2, "0"); return `Scan ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; }
+$("#btnPdf").addEventListener("click", () => { $("#fname").value = $("#fname").value || defaultName(); $("#status").textContent = ""; $("#status").className = "status"; $("#sheet").hidden = false; });
+$("#sheetClose").addEventListener("click", () => $("#sheet").hidden = true);
+$("#sheet").addEventListener("click", e => { if (e.target.id === "sheet") $("#sheet").hidden = true; });
+
+async function blobToCanvas(blob, maxSide) {
+  const cv = await loadSource(blob);
+  const s = Math.min(1, maxSide / Math.max(cv.width, cv.height)); if (s === 1) return cv;
+  const c = document.createElement("canvas"); c.width = Math.round(cv.width * s); c.height = Math.round(cv.height * s);
+  const x = c.getContext("2d"); x.imageSmoothingQuality = "high"; x.drawImage(cv, 0, 0, c.width, c.height); return c;
+}
+async function buildPdf(fmt, quality) {
+  const { jsPDF } = window.jspdf; let doc = null;
+  const maxSide = quality === "high" ? 2400 : 1600, q = quality === "high" ? 0.9 : 0.72;
+  for (let n = 0; n < pages.length; n++) {
+    setStatus(`Seite ${n + 1} von ${pages.length} …`); await tick();
+    const c = await blobToCanvas(pages[n].out, maxSide), w = c.width, h = c.height, land = w > h;
+    let pw, ph, iw, ih, x, y;
+    if (fmt === "a4") { pw = land ? 297 : 210; ph = land ? 210 : 297; const k = Math.min(pw / w, ph / h); iw = w * k; ih = h * k; x = (pw - iw) / 2; y = (ph - ih) / 2; }
+    else { pw = land ? 297 : 210; ph = pw * h / w; iw = pw; ih = ph; x = 0; y = 0; }
+    const o = pw > ph ? "l" : "p";
+    if (!doc) doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: o, compress: true }); else doc.addPage([pw, ph], o);
+    doc.addImage(c.toDataURL("image/jpeg", q), "JPEG", x, y, iw, ih, undefined, "FAST");
+  }
+  return doc.output("blob");
+}
+function setStatus(t, err) { const s = $("#status"); s.textContent = t; s.className = "status" + (err ? " err" : ""); }
+function fmtSize(b) { return b > 1e6 ? (b / 1e6).toFixed(1).replace(".", ",") + " MB" : Math.max(1, Math.round(b / 1e3)) + " KB"; }
+
+$("#pdfForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  if (!window.jspdf) return setStatus("Die PDF-Bibliothek wurde nicht geladen. Bitte die Seite neu laden.", true);
+  const btn = $("#btnMake"); btn.disabled = true;
+  let name = ($("#fname").value || defaultName()).replace(/[\\/:*?"<>|]+/g, "-").trim().replace(/\.pdf$/i, "") || "Scan";
+  try {
+    const fmt = document.querySelector('input[name="fmt"]:checked').value, ql = document.querySelector('input[name="q"]:checked').value;
+    const blob = await buildPdf(fmt, ql), file = name + ".pdf";
+    setStatus(`PDF fertig (${fmtSize(blob.size)}). Bitte Speichern bestätigen …`);
+    if (downloads) {
+      try { await downloads.save({ filename: file, data: blob }); setStatus(`„${file}“ gespeichert.`); toast("PDF gespeichert"); }
+      catch (err) {
+        const c = err && err.code;
+        if (c === "declined") setStatus("Speichern abgebrochen. Du kannst es erneut versuchen.");
+        else if (c === "rate_limited") setStatus("Es ist schon ein Speichern-Dialog offen. Kurz warten und erneut tippen.", true);
+        else if (c === "too_large") setStatus("Die Datei ist zu groß. Wähle Qualität „Standard“.", true);
+        else setStatus("Speichern ist in dieser Ansicht nicht möglich.", true);
+      }
+    } else if (!window.claude) {
+      // standalone use (file opened directly in a browser)
+      const f = new File([blob], file, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [f] })) { try { await navigator.share({ files: [f], title: name }); setStatus("PDF geteilt."); } catch (_) { setStatus("Teilen abgebrochen."); } }
+      else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = file; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); setStatus(`„${file}“ heruntergeladen.`); }
+    } else setStatus("Speichern ist in dieser Ansicht nicht möglich.", true);
+  } catch (err) { setStatus("Die PDF konnte nicht erstellt werden. Versuche es mit weniger Seiten oder Qualität „Standard“.", true); }
+  btn.disabled = false;
+});
+
+/* ---------- boot ---------- */
+(async () => {
+  await DB.open();
+  const saved = (await DB.all()).sort((a, b) => (a.pos || 0) - (b.pos || 0));
+  for (const p of saved) { if (p.out) { p.url = URL.createObjectURL(p.out); pages.push(p); } }
+  render();
+})();
+})();
+</script>
+
+<script>
+if ("serviceWorker" in navigator) { window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {})); }
+</script>
+</body>
+</html>
